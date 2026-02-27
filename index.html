@@ -6,6 +6,7 @@
   <title>Personal Calendar</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
+
 <body>
   <div class="app">
     <header class="topbar">
@@ -53,15 +54,15 @@
       <div class="backdrop" id="drawerBackdrop"></div>
     </section>
 
-  <script src="./config.js?v=1"></script>
-<script src="./app.js?v=1"></script>
-</body>
-        Read‑only mirror of your Howbout calendar (via iCloud Public Calendar link).
+    <footer class="footer">
+      <div class="footerInner">
+        Read-only mirror of your Howbout calendar (via iCloud Public Calendar link).
       </div>
     </footer>
   </div>
 
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
+  <!-- IMPORTANT: config.js must load before app.js -->
+  <script src="./config.js?v=1"></script>
+  <script src="./app.js?v=1"></script>
 </body>
 </html>
