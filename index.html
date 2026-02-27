@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Personal Calendar</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="dot"></div>
+        <div class="titles">
+          <div class="title">Personal Calendar</div>
+          <div class="subtitle" id="subtitle">—</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="seg" role="tablist" aria-label="View">
+          <button class="segBtn active" id="monthBtn" role="tab" aria-selected="true">Month</button>
+          <button class="segBtn" id="weekBtn" role="tab" aria-selected="false">Week</button>
+          <button class="segBtn" id="agendaBtn" role="tab" aria-selected="false">Agenda</button>
+        </div>
+
+        <button class="btn" id="prevBtn" aria-label="Previous">‹</button>
+        <button class="btn" id="todayBtn">Today</button>
+        <button class="btn" id="nextBtn" aria-label="Next">›</button>
+      </div>
+    </header>
+
+    <main class="panel">
+      <div class="dow" id="dow">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+
+      <div class="grid" id="grid"></div>
+      <div class="agenda hidden" id="agenda"></div>
+    </main>
+
+    <section class="drawer" id="drawer" aria-hidden="true">
+      <div class="drawerCard">
+        <div class="drawerHead">
+          <div>
+            <div class="drawerTitle" id="drawerTitle">—</div>
+            <div class="drawerSub" id="drawerSub">—</div>
+          </div>
+          <button class="iconBtn" id="drawerClose" aria-label="Close">✕</button>
+        </div>
+        <div class="eventList" id="eventList"></div>
+      </div>
+      <div class="backdrop" id="drawerBackdrop"></div>
+    </section>
+
+    <footer class="footer">
+      <div class="footNote">
+        Read‑only mirror of your Howbout calendar (via iCloud Public Calendar link).
+      </div>
+    </footer>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
