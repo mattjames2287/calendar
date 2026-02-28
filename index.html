@@ -4,63 +4,77 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Personal Calendar</title>
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css?v=1" />
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="dot"></div>
-        <div class="titles">
-          <div class="title">Personal Calendar</div>
-          <div class="subtitle" id="subtitle">—</div>
+  <div class="layout">
+    <aside class="slideshow" id="slideshow" aria-label="Slideshow">
+      <div class="slideFrame">
+        <img id="slideImg" alt="" />
+        <div class="slideShade"></div>
+        <div class="slideLabel">
+          <div class="slideTitle">Slideshow</div>
+          <div class="slideSub" id="slideSub">—</div>
         </div>
       </div>
+    </aside>
 
-      <div class="controls">
-        <div class="seg" role="tablist" aria-label="View">
-          <button class="segBtn active" id="monthBtn" role="tab" aria-selected="true">Month</button>
-          <button class="segBtn" id="weekBtn" role="tab" aria-selected="false">Week</button>
-          <button class="segBtn" id="agendaBtn" role="tab" aria-selected="false">Agenda</button>
-        </div>
-
-        <button class="btn" id="prevBtn" aria-label="Previous">‹</button>
-        <button class="btn" id="todayBtn">Today</button>
-        <button class="btn" id="nextBtn" aria-label="Next">›</button>
-      </div>
-    </header>
-
-    <main class="panel">
-      <div class="dow" id="dow">
-        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
-      </div>
-
-      <div class="grid" id="grid"></div>
-      <div class="agenda hidden" id="agenda"></div>
-    </main>
-
-    <section class="drawer" id="drawer" aria-hidden="true">
-      <div class="drawerCard">
-        <div class="drawerHead">
-          <div>
-            <div class="drawerTitle" id="drawerTitle">—</div>
-            <div class="drawerSub" id="drawerSub">—</div>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="dot"></div>
+          <div class="titles">
+            <div class="title">Personal Calendar</div>
+            <div class="subtitle" id="subtitle">—</div>
           </div>
-          <button class="iconBtn" id="drawerClose" aria-label="Close">✕</button>
         </div>
-        <div class="eventList" id="eventList"></div>
-      </div>
-      <div class="backdrop" id="drawerBackdrop"></div>
-    </section>
 
-    <footer class="footer">
-      <div class="footNote">
-        Read‑only mirror of your Howbout calendar (via iCloud Public Calendar link).
-      </div>
-    </footer>
+        <div class="controls">
+          <div class="seg" role="tablist" aria-label="View">
+            <button class="segBtn active" id="monthBtn" role="tab" aria-selected="true">Month</button>
+            <button class="segBtn" id="weekBtn" role="tab" aria-selected="false">Week</button>
+          </div>
+
+          <button class="btn" id="todayBtn" title="Jump to Today">Today</button>
+        </div>
+      </header>
+
+      <main class="panel">
+        <div class="dow" id="dow">
+          <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+        </div>
+
+        <div class="grid" id="grid" aria-label="Month grid"></div>
+
+        <div class="week hidden" id="week" aria-label="Week view">
+          <div class="weekCols" id="weekCols"></div>
+        </div>
+      </main>
+
+      <section class="drawer" id="drawer" aria-hidden="true">
+        <div class="drawerCard">
+          <div class="drawerHead">
+            <div>
+              <div class="drawerTitle" id="drawerTitle">—</div>
+              <div class="drawerSub" id="drawerSub">—</div>
+            </div>
+            <button class="iconBtn" id="drawerClose" aria-label="Close">✕</button>
+          </div>
+          <div class="eventList" id="eventList"></div>
+        </div>
+        <div class="backdrop" id="drawerBackdrop"></div>
+      </section>
+
+      <footer class="footer">
+        <div class="footerInner">
+          Read-only mirror: Howbout calendar + iCloud Shared Album slideshow.
+        </div>
+      </footer>
+    </div>
   </div>
 
-  <script src="./config.js"></script>
-  <script src="./app.js"></script>
+  <!-- config.js must load before app.js -->
+  <script src="./config.js?v=1"></script>
+  <script src="./app.js?v=1"></script>
 </body>
 </html>

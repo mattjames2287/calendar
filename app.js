@@ -1,353 +1,310 @@
-(() => {
-  const cfg = window.CALENDAR_CONFIG || {};
-  const API_BASE = (cfg.API_BASE || "").trim();
-  const TOKEN = (cfg.TOKEN || "").trim();
+/* Standalone Personal Calendar (read-only)
+ * - Month-only (current month)
+ * - Week view toggle (current week)
+ * - Highlight Today
+ * - Slideshow (landscape) pulled from Apps Script
+ */
 
+(function(){
+  const cfg = window.CALENDAR_CONFIG || {};
   const el = (id) => document.getElementById(id);
-  const subtitle = el("subtitle");
-  const grid = el("grid");
-  const dow = el("dow");
-  const agenda = el("agenda");
 
   const monthBtn = el("monthBtn");
   const weekBtn = el("weekBtn");
-  const agendaBtn = el("agendaBtn");
-  const prevBtn = el("prevBtn");
-  const nextBtn = el("nextBtn");
   const todayBtn = el("todayBtn");
 
+  const subtitle = el("subtitle");
+  const grid = el("grid");
+  const weekWrap = el("week");
+  const weekCols = el("weekCols");
+
   const drawer = el("drawer");
+  const drawerClose = el("drawerClose");
+  const drawerBackdrop = el("drawerBackdrop");
   const drawerTitle = el("drawerTitle");
   const drawerSub = el("drawerSub");
   const eventList = el("eventList");
-  const drawerClose = el("drawerClose");
-  const drawerBackdrop = el("drawerBackdrop");
 
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const isoDate = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-  const todayISO = isoDate(new Date());
+  const slideshow = el("slideshow");
+  const slideImg = el("slideImg");
+  const slideSub = el("slideSub");
 
-  let view = "month"; // month|week|agenda
-  let cursor = new Date(); cursor.setDate(1);
-  let events = [];          // raw events
-  let eventsByDay = {};     // { YYYY-MM-DD: [event] }
-  let openDay = null;
+  const today = new Date();
+  let view = "month";
+  let eventsByDay = new Map(); // key YYYY-MM-DD -> events[]
+  let monthStart, monthEnd;
 
-  function jsonp(url){
-    return new Promise((resolve,reject)=>{
-      const cb = "cb_" + Math.random().toString(36).slice(2);
-      const s = document.createElement("script");
-      const sep = url.includes("?") ? "&" : "?";
-      s.src = `${url}${sep}callback=${cb}`;
-      const t = setTimeout(()=>{cleanup(); reject(new Error("JSONP timeout"));}, 12000);
-      function cleanup(){ clearTimeout(t); delete window[cb]; s.remove(); }
-      window[cb] = (data)=>{ cleanup(); resolve(data); };
-      s.onerror = ()=>{ cleanup(); reject(new Error("JSONP load error")); };
-      document.head.appendChild(s);
-    });
+  function isoDate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
   }
-
-  async function apiRange(startISO, endISO){
-    if (!API_BASE || !TOKEN) {
-      throw new Error("Missing config. Open config.js and set API_BASE + TOKEN.");
-    }
-    const q = new URLSearchParams({ route: "range", token: TOKEN, start: startISO, end: endISO });
-    const res = await jsonp(`${API_BASE}?${q.toString()}`);
-    if (!res || !res.ok) throw new Error(res?.error || "API error");
-    return res.events || [];
+  function startOfMonth(d){
+    return new Date(d.getFullYear(), d.getMonth(), 1);
   }
-
-  function fmtMonth(d){
-    return d.toLocaleString(undefined, { month: "long", year: "numeric" });
+  function endOfMonthExclusive(d){
+    return new Date(d.getFullYear(), d.getMonth()+1, 1);
   }
-  function weekStart(d){
+  function startOfWeekSun(d){
     const x = new Date(d);
     x.setHours(0,0,0,0);
     x.setDate(x.getDate() - x.getDay());
     return x;
   }
-
-  function setView(v){
-    view = v;
-    monthBtn.classList.toggle("active", v==="month");
-    weekBtn.classList.toggle("active", v==="week");
-    agendaBtn.classList.toggle("active", v==="agenda");
-
-    dow.classList.toggle("hidden", v==="agenda");
-    grid.classList.toggle("hidden", v==="agenda");
-    agenda.classList.toggle("hidden", v!=="agenda");
-
-    refresh();
+  function addDays(d, n){
+    const x = new Date(d);
+    x.setDate(x.getDate()+n);
+    return x;
+  }
+  function fmtMonthTitle(d){
+    return d.toLocaleDateString(undefined, { month:"long", year:"numeric" });
+  }
+  function fmtDayTitle(d){
+    return d.toLocaleDateString(undefined, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
+  }
+  function fmtTimeRange(ev){
+    if(ev.allDay) return "All day";
+    const s = new Date(ev.start);
+    const e = ev.end ? new Date(ev.end) : null;
+    const opts = { hour:"numeric", minute:"2-digit" };
+    const a = s.toLocaleTimeString(undefined, opts);
+    const b = e ? e.toLocaleTimeString(undefined, opts) : "";
+    return b ? `${a}–${b}` : a;
   }
 
-  function groupByDay(list){
-    const map = {};
-    for (const ev of list){
-      const day = ev.day;
-      (map[day] = map[day] || []).push(ev);
+  // JSONP helper
+  function jsonp(url){
+    return new Promise((resolve, reject)=>{
+      const cb = "cb_" + Math.random().toString(36).slice(2);
+      const script = document.createElement("script");
+      window[cb] = (data)=>{
+        try{
+          delete window[cb];
+          script.remove();
+        }catch(_){}
+        resolve(data);
+      };
+      script.onerror = ()=>{
+        try{ delete window[cb]; script.remove(); }catch(_){}
+        reject(new Error("JSONP load failed"));
+      };
+      const join = url.includes("?") ? "&" : "?";
+      script.src = url + join + "callback=" + cb;
+      document.body.appendChild(script);
+    });
+  }
+
+  function apiUrl(params){
+    const base = String(cfg.API_BASE || "").trim();
+    if(!base) throw new Error("Missing API_BASE in config.js");
+    const u = new URL(base);
+    Object.keys(params).forEach(k=>u.searchParams.set(k, params[k]));
+    return u.toString();
+  }
+
+  async function loadMonthEvents(){
+    monthStart = startOfMonth(today);
+    monthEnd = endOfMonthExclusive(today);
+
+    subtitle.textContent = fmtMonthTitle(today);
+
+    const start = isoDate(monthStart);
+    const end = isoDate(monthEnd);
+
+    const data = await jsonp(apiUrl({
+      route:"range",
+      start,
+      end,
+      token: cfg.TOKEN || ""
+    }));
+
+    if(!data || !data.ok) throw new Error(data && data.error ? data.error : "Calendar fetch failed");
+
+    eventsByDay = new Map();
+    for(const ev of (data.events || [])){
+      const d = new Date(ev.start);
+      // Use local date for grouping
+      const key = isoDate(d);
+      if(!eventsByDay.has(key)) eventsByDay.set(key, []);
+      eventsByDay.get(key).push(ev);
     }
-    for (const k of Object.keys(map)){
-      map[k].sort((a,b)=> (a.sortKey || "").localeCompare(b.sortKey || ""));
-    }
-    return map;
-  }
-
-  function toLocalDisplay(ev){
-    // ev.start / ev.end are ISO strings (UTC). We'll display in user's local timezone.
-    const allDay = !!ev.allDay;
-    const start = ev.start ? new Date(ev.start) : null;
-    const end = ev.end ? new Date(ev.end) : null;
-
-    let timeLabel = "All day";
-    if (!allDay && start){
-      const opts = { hour: "numeric", minute: "2-digit" };
-      const s = start.toLocaleTimeString([], opts);
-      if (end) {
-        const e = end.toLocaleTimeString([], opts);
-        timeLabel = `${s}–${e}`;
-      } else {
-        timeLabel = s;
-      }
-    }
-
-    return { timeLabel };
-  }
-
-  function buildDerived(list){
-    const derived = [];
-    for (const ev of list){
-      const day = (ev.start ? isoDate(new Date(ev.start)) : (ev.day || "")) || "";
-      const { timeLabel } = toLocalDisplay(ev);
-
-      // sortKey ensures all-day first, then time
-      let sortKey = "0";
-      if (ev.allDay) sortKey = "0";
-      else {
-        const d = new Date(ev.start);
-        sortKey = "1" + pad2(d.getHours()) + pad2(d.getMinutes());
-      }
-
-      derived.push({
-        title: ev.title || "(No title)",
-        start: ev.start || "",
-        end: ev.end || "",
-        allDay: !!ev.allDay,
-        day,
-        timeLabel,
-        sortKey
-      });
-    }
-    return derived;
-  }
-
-  function monthRangeForGrid(y, m0){
-    // Return start/end that covers the 6x7 calendar grid (Sun..Sat)
-    const first = new Date(y, m0, 1);
-    const start = new Date(first);
-    start.setDate(1 - first.getDay()); // go back to Sunday
-    start.setHours(0,0,0,0);
-
-    const end = new Date(start);
-    end.setDate(end.getDate() + 42); // 42 days
-    return { start, end };
-  }
-
-  async function refresh(){
-    subtitle.textContent = "Loading…";
-    try{
-      let start, end;
-
-      if (view === "month" || view === "agenda"){
-        const { start: s, end: e } = monthRangeForGrid(cursor.getFullYear(), cursor.getMonth());
-        start = s; end = e;
-        subtitle.textContent = (view === "agenda") ? `Agenda · ${fmtMonth(cursor)}` : fmtMonth(cursor);
-      } else {
-        const s = weekStart(cursor);
-        const e = new Date(s); e.setDate(e.getDate()+7);
-        start = s; end = e;
-        const end6 = new Date(s); end6.setDate(end6.getDate()+6);
-        subtitle.textContent = `${isoDate(s)} → ${isoDate(end6)}`;
-      }
-
-      const raw = await apiRange(isoDate(start), isoDate(end));
-      events = buildDerived(raw);
-      eventsByDay = groupByDay(events);
-
-      if (view === "month") renderMonth();
-      else if (view === "week") renderWeek();
-      else renderAgenda();
-
-    } catch (e){
-      subtitle.textContent = "Setup needed";
-      alert(e.message || String(e));
-    }
-  }
-
-  function previewForDay(dayISO){
-    const dayEvents = eventsByDay[dayISO] || [];
-    if (!dayEvents.length) return { text: "No events", empty: true };
-
-    const lines = dayEvents.slice(0,3).map(ev => ev.allDay ? `All day · ${ev.title}` : `${ev.timeLabel} · ${ev.title}`);
-    return { text: lines.join("\n"), empty:false };
   }
 
   function renderMonth(){
-    grid.style.gridAutoRows = "";
+    weekWrap.classList.add("hidden");
+    grid.classList.remove("hidden");
+
     grid.innerHTML = "";
 
-    const y = cursor.getFullYear();
-    const m0 = cursor.getMonth();
-    const first = new Date(y, m0, 1);
-    const startDow = first.getDay();
-    const dim = new Date(y, m0+1, 0).getDate();
-    const prevDim = new Date(y, m0, 0).getDate();
+    const first = startOfMonth(today);
+    const firstDow = first.getDay(); // 0 Sun
+    const daysInMonth = endOfMonthExclusive(today).getDate() - 1; // not used
+    const last = new Date(today.getFullYear(), today.getMonth()+1, 0);
+    const totalDays = last.getDate();
 
-    for (let cell=0; cell<42; cell++){
-      const dayIndex = cell - startDow + 1;
-      let showY=y, showM=m0+1, showD=dayIndex, muted=false;
+    // Fill leading blanks (muted)
+    for(let i=0;i<firstDow;i++){
+      const cell = document.createElement("div");
+      cell.className = "day muted";
+      grid.appendChild(cell);
+    }
 
-      if (dayIndex < 1){
-        muted=true; showM=m0; if (showM<1){showM=12;showY=y-1;} showD=prevDim+dayIndex;
-      } else if (dayIndex > dim){
-        muted=true; showM=m0+2; if (showM>12){showM=1;showY=y+1;} showD=dayIndex-dim;
-      }
+    for(let day=1; day<=totalDays; day++){
+      const d = new Date(today.getFullYear(), today.getMonth(), day);
+      const key = isoDate(d);
+      const evs = (eventsByDay.get(key) || []).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
 
-      const dayISO = `${showY}-${pad2(showM)}-${pad2(showD)}`;
-      const dayEvents = eventsByDay[dayISO] || [];
+      const cell = document.createElement("div");
+      cell.className = "day";
+      if(isoDate(d) === isoDate(today)) cell.classList.add("today");
 
-      const day = document.createElement("div");
-      day.className = "day" + (muted ? " muted" : "") + (dayISO===todayISO ? " today" : "");
+      cell.dataset.date = key;
 
-      const head = document.createElement("div");
-      head.className = "head";
+      const header = document.createElement("div");
+      header.className = "dayHeader";
 
       const num = document.createElement("div");
-      num.className = "num";
-      num.textContent = showD;
+      num.className = "dayNum";
+      num.textContent = String(day);
 
-      const count = document.createElement("div");
-      count.className = "count";
-      count.textContent = dayEvents.length ? `${dayEvents.length}` : "";
+      const badge = document.createElement("div");
+      badge.className = "todayBadge";
+      badge.textContent = "Today";
 
-      head.appendChild(num);
-      head.appendChild(count);
-      day.appendChild(head);
+      header.appendChild(num);
+      header.appendChild(badge);
 
-      const pv = previewForDay(dayISO);
-      const p = document.createElement("div");
-      p.className = "preview" + (pv.empty ? " empty" : "");
-      p.textContent = pv.text;
-      day.appendChild(p);
+      const dots = document.createElement("div");
+      dots.className = "dots";
+      for(let i=0;i<Math.min(evs.length, 6); i++){
+        const dot = document.createElement("div");
+        dot.className = "dotEv";
+        dots.appendChild(dot);
+      }
 
-      day.addEventListener("click", async ()=>{
-        const d = new Date(dayISO+"T00:00:00");
-        if (d.getMonth() !== cursor.getMonth() || d.getFullYear() !== cursor.getFullYear()){
-          cursor = new Date(d.getFullYear(), d.getMonth(), 1);
-          await refresh();
-        }
-        openDrawer(dayISO);
+      const preview = document.createElement("div");
+      preview.className = "eventPreview";
+      if(evs.length===0){
+        preview.textContent = "";
+      } else if(evs.length===1){
+        preview.textContent = evs[0].title;
+      } else {
+        preview.textContent = `${evs[0].title} +${evs.length-1} more`;
+      }
+
+      cell.appendChild(header);
+      cell.appendChild(dots);
+      cell.appendChild(preview);
+
+      cell.addEventListener("click", ()=>{
+        openDrawerForDate(d);
       });
 
-      grid.appendChild(day);
+      grid.appendChild(cell);
+    }
+
+    // trailing blanks for neat grid alignment (optional)
+    const filled = firstDow + totalDays;
+    const remainder = filled % 7;
+    const tail = remainder===0 ? 0 : (7 - remainder);
+    for(let i=0;i<tail;i++){
+      const cell = document.createElement("div");
+      cell.className = "day muted";
+      grid.appendChild(cell);
     }
   }
 
   function renderWeek(){
-    const start = weekStart(cursor);
-    grid.style.gridAutoRows = "minmax(140px, 1fr)";
-    grid.innerHTML = "";
+    grid.classList.add("hidden");
+    weekWrap.classList.remove("hidden");
 
-    for (let i=0;i<7;i++){
-      const d = new Date(start); d.setDate(d.getDate()+i);
-      const dayISO = isoDate(d);
-      const dayEvents = eventsByDay[dayISO] || [];
+    weekCols.innerHTML = "";
 
-      const day = document.createElement("div");
-      day.className = "day" + (dayISO===todayISO ? " today" : "");
+    const ws = startOfWeekSun(today);
+    for(let i=0;i<7;i++){
+      const d = addDays(ws, i);
+      const key = isoDate(d);
+      const evs = (eventsByDay.get(key) || []).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
+
+      const col = document.createElement("div");
+      col.className = "weekCol";
+      if(key===isoDate(today)) col.classList.add("today");
 
       const head = document.createElement("div");
-      head.className = "head";
+      head.className = "weekColHead";
 
-      const num = document.createElement("div");
-      num.className = "num";
-      num.textContent = d.toLocaleString(undefined, { weekday: "short" }) + " " + d.getDate();
+      const wd = document.createElement("div");
+      wd.textContent = d.toLocaleDateString(undefined, { weekday:"short" });
 
-      const count = document.createElement("div");
-      count.className = "count";
-      count.textContent = dayEvents.length ? `${dayEvents.length}` : "";
+      const n = document.createElement("div");
+      n.className = "n";
+      n.textContent = String(d.getDate());
 
-      head.appendChild(num);
-      head.appendChild(count);
-      day.appendChild(head);
+      head.appendChild(wd);
+      head.appendChild(n);
 
-      const pv = previewForDay(dayISO);
-      const p = document.createElement("div");
-      p.className = "preview" + (pv.empty ? " empty" : "");
-      p.textContent = pv.text;
-      day.appendChild(p);
+      col.appendChild(head);
 
-      day.addEventListener("click", ()=> openDrawer(dayISO));
-      grid.appendChild(day);
+      if(evs.length===0){
+        const empty = document.createElement("div");
+        empty.className = "eventItemMeta";
+        empty.textContent = "—";
+        col.appendChild(empty);
+      } else {
+        for(const ev of evs){
+          const box = document.createElement("div");
+          box.className = "weekEv";
+          box.addEventListener("click", ()=> openDrawerForDate(d));
+
+          const t = document.createElement("div");
+          t.className = "weekEvT";
+          t.textContent = ev.title;
+
+          const s = document.createElement("div");
+          s.className = "weekEvS";
+          s.textContent = fmtTimeRange(ev);
+
+          box.appendChild(t);
+          box.appendChild(s);
+          col.appendChild(box);
+        }
+      }
+
+      weekCols.appendChild(col);
     }
   }
 
-  function renderAgenda(){
-    agenda.innerHTML = "";
+  function openDrawerForDate(d){
+    const key = isoDate(d);
+    const evs = (eventsByDay.get(key) || []).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
 
-    const days = Object.keys(eventsByDay).sort();
-    const month0 = cursor.getMonth();
-    const year = cursor.getFullYear();
-
-    let shown = 0;
-    for (const dayISO of days){
-      const d = new Date(dayISO+"T00:00:00");
-      if (d.getMonth() !== month0 || d.getFullYear() !== year) continue;
-
-      const dayEvents = eventsByDay[dayISO] || [];
-      if (!dayEvents.length) continue;
-
-      shown++;
-
-      const box = document.createElement("div");
-      box.className = "agendaItem";
-      const nice = d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
-      box.innerHTML = `<div class="agendaDate">${nice}</div>`;
-
-      dayEvents.forEach(ev=>{
-        const line = document.createElement("div");
-        line.className = "agendaLine";
-        const t = ev.allDay ? "All day" : ev.timeLabel;
-        line.innerHTML = `<span class="agendaTime">${t}</span>${escapeHtml(ev.title)}`;
-        line.addEventListener("click", ()=> openDrawer(dayISO));
-        box.appendChild(line);
-      });
-
-      agenda.appendChild(box);
-    }
-
-    if (!shown){
-      agenda.innerHTML = `<div class="agendaItem"><div class="agendaDate">No events this month</div></div>`;
-    }
-  }
-
-  function openDrawer(dayISO){
-    openDay = dayISO;
-    drawerTitle.textContent = new Date(dayISO+"T00:00:00").toLocaleDateString(undefined, { weekday:"long", month:"short", day:"numeric", year:"numeric" });
-
-    const dayEvents = eventsByDay[dayISO] || [];
-    drawerSub.textContent = dayEvents.length ? `${dayEvents.length} event${dayEvents.length===1?"":"s"}` : "No events";
-
+    drawerTitle.textContent = fmtDayTitle(d);
+    drawerSub.textContent = evs.length ? `${evs.length} event${evs.length===1?"":"s"}` : "No events";
     eventList.innerHTML = "";
-    if (!dayEvents.length){
-      eventList.innerHTML = `<div class="eventCard"><div class="eventTitle">No events</div><div class="eventMeta">Nothing scheduled.</div></div>`;
+
+    if(!evs.length){
+      const item = document.createElement("div");
+      item.className = "eventItem";
+      item.innerHTML = `<div class="eventItemTitle">No events</div><div class="eventItemMeta">—</div>`;
+      eventList.appendChild(item);
     } else {
-      dayEvents.forEach(ev=>{
-        const card = document.createElement("div");
-        card.className = "eventCard";
-        const t = ev.allDay ? "All day" : ev.timeLabel;
-        card.innerHTML = `<div class="eventTitle">${escapeHtml(ev.title)}</div><div class="eventMeta">${t}</div>`;
-        eventList.appendChild(card);
-      });
+      for(const ev of evs){
+        const item = document.createElement("div");
+        item.className = "eventItem";
+
+        const t = document.createElement("div");
+        t.className = "eventItemTitle";
+        t.textContent = ev.title;
+
+        const m = document.createElement("div");
+        m.className = "eventItemMeta";
+        m.textContent = fmtTimeRange(ev);
+
+        item.appendChild(t);
+        item.appendChild(m);
+        eventList.appendChild(item);
+      }
     }
 
     drawer.classList.add("show");
@@ -357,59 +314,106 @@
   function closeDrawer(){
     drawer.classList.remove("show");
     drawer.setAttribute("aria-hidden","true");
-    openDay = null;
   }
-
-  function escapeHtml(s){
-    return String(s||"")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  // navigation
-  prevBtn.addEventListener("click", async ()=>{
-    if (view === "week"){
-      cursor = weekStart(cursor);
-      cursor.setDate(cursor.getDate()-7);
-    } else {
-      cursor.setMonth(cursor.getMonth()-1);
-      cursor.setDate(1);
-    }
-    await refresh();
-  });
-  nextBtn.addEventListener("click", async ()=>{
-    if (view === "week"){
-      cursor = weekStart(cursor);
-      cursor.setDate(cursor.getDate()+7);
-    } else {
-      cursor.setMonth(cursor.getMonth()+1);
-      cursor.setDate(1);
-    }
-    await refresh();
-  });
-  todayBtn.addEventListener("click", async ()=>{
-    const t = new Date();
-    if (view === "week") cursor = weekStart(t);
-    else cursor = new Date(t.getFullYear(), t.getMonth(), 1);
-    await refresh();
-  });
-
-  monthBtn.addEventListener("click", ()=> setView("month"));
-  weekBtn.addEventListener("click", ()=> setView("week"));
-  agendaBtn.addEventListener("click", ()=> setView("agenda"));
 
   drawerClose.addEventListener("click", closeDrawer);
   drawerBackdrop.addEventListener("click", closeDrawer);
+  document.addEventListener("keydown",(e)=>{
+    if(e.key === "Escape") closeDrawer();
+  });
 
-  // boot
-  (async ()=>{
+  function setView(next){
+    view = next;
+    monthBtn.classList.toggle("active", view==="month");
+    weekBtn.classList.toggle("active", view==="week");
+    monthBtn.setAttribute("aria-selected", view==="month" ? "true":"false");
+    weekBtn.setAttribute("aria-selected", view==="week" ? "true":"false");
+    if(view==="month") renderMonth();
+    else renderWeek();
+  }
+
+  monthBtn.addEventListener("click", ()=>setView("month"));
+  weekBtn.addEventListener("click", ()=>setView("week"));
+  todayBtn.addEventListener("click", ()=>{
+    // always current month anyway; just ensure highlights / drawer anchors
+    setView(view);
+  });
+
+  // Slideshow (landscape only) pulling from Apps Script
+  let slideshowUrls = [];
+  let slideIdx = 0;
+  let slideTimer = null;
+
+  async function loadSlideshow(){
+    // Only run slideshow in landscape; CSS hides it otherwise
+    const isLandscape = window.matchMedia && window.matchMedia("(orientation: landscape)").matches;
+    if(!isLandscape) return;
+
     try{
-      await refresh();
-    } catch(e){
-      // handled in refresh
+      const data = await jsonp(apiUrl({
+        route: "photos",
+        token: cfg.TOKEN || ""
+      }));
+
+      if(data && data.ok && Array.isArray(data.photos) && data.photos.length){
+        slideshowUrls = data.photos.slice(0, 100);
+        slideSub.textContent = `${slideshowUrls.length} photos`;
+        startSlideshow();
+      } else {
+        slideSub.textContent = "No photos";
+      }
+    } catch (e){
+      slideSub.textContent = "Slideshow unavailable";
     }
-  })();
+  }
+
+  function showSlide(){
+    if(!slideshowUrls.length || !slideImg) return;
+    const url = slideshowUrls[slideIdx % slideshowUrls.length];
+    slideIdx++;
+
+    // Preload then fade
+    const img = new Image();
+    img.onload = ()=>{
+      slideImg.classList.remove("show");
+      // next tick to allow transition
+      requestAnimationFrame(()=>{
+        slideImg.src = url;
+        requestAnimationFrame(()=> slideImg.classList.add("show"));
+      });
+    };
+    img.src = url;
+  }
+
+  function startSlideshow(){
+    stopSlideshow();
+    showSlide();
+    const interval = Number(cfg.SLIDESHOW_INTERVAL_MS || 12000);
+    slideTimer = setInterval(showSlide, Math.max(3000, interval));
+  }
+
+  function stopSlideshow(){
+    if(slideTimer){
+      clearInterval(slideTimer);
+      slideTimer = null;
+    }
+  }
+
+  window.addEventListener("orientationchange", ()=>{
+    stopSlideshow();
+    loadSlideshow();
+  });
+
+  async function init(){
+    try{
+      await loadMonthEvents();
+      setView("month");
+      await loadSlideshow();
+    } catch (e){
+      subtitle.textContent = "Check config.js / Apps Script";
+      console.error(e);
+    }
+  }
+
+  init();
 })();
