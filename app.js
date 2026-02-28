@@ -356,7 +356,7 @@
       }));
 
       if(data && data.ok && Array.isArray(data.photos) && data.photos.length){
-        slideshowUrls = data.photos.slice(0, 100);
+        slideshowUrls = data.photos.map(p => (typeof p === 'string' ? p : (p && p.url))).filter(Boolean).slice(0, 100);
         slideSub.textContent = `${slideshowUrls.length} photos`;
         startSlideshow();
       } else {

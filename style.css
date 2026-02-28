@@ -25,7 +25,9 @@ body{
 }
 
 .layout{
+  height:100vh;
   min-height:100vh;
+  align-items:stretch;
   display:flex;
   gap:18px;
   padding:18px;
@@ -37,7 +39,7 @@ body{
 }
 .slideFrame{
   height:100%;
-  min-height: calc(100vh - 36px);
+  height: calc(100vh - 36px);
   background: #050506;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -80,6 +82,7 @@ body{
   display:flex;
   flex-direction:column;
   overflow:hidden;
+  height: calc(100vh - 36px);
 }
 
 .topbar{
@@ -338,15 +341,6 @@ body{
 .eventItemTitle{ font-weight:750; }
 .eventItemMeta{ color:var(--muted); font-size:12px; margin-top:4px; white-space:pre-wrap; }
 
-.footer{
-  border-top:1px solid var(--line);
-  padding:10px 14px;
-  color:var(--muted);
-  font-size:12px;
-  background: rgba(10,10,12,.9);
-}
-
-/* Landscape / Raspberry Pi */
 @media (orientation: landscape) and (min-width: 900px){
   .slideshow{ display:block; }
   .layout{ padding:18px; }
@@ -358,3 +352,6 @@ body{
   .grid{ gap:8px; }
   .day{ min-height:84px; padding:9px; }
 }
+
+
+.footer{display:none !important;}
