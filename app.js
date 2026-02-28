@@ -401,8 +401,6 @@
   }
 
   function startSlideshow(){
-
-  function startSlideshow(){
     stopSlideshow();
     showSlide();
     const interval = Number(cfg.SLIDESHOW_INTERVAL_MS || 12000);
@@ -422,15 +420,24 @@
   });
 
   async function init(){
+    // Always render UI first (even if backend is offline)
+    subtitle.textContent = fmtMonthTitle(today);
+    eventsByDay = new Map();
+    setView("month");
+
+    // Then try loading events
     try{
       await loadMonthEvents();
-      setView("month");
+      setView(view);
+    } catch (e){
+      console.error(e);
+      subtitle.textContent = fmtMonthTitle(today) + "  •  Offline";
+    }
+
+    // Slideshow (optional)
+    try{
       await loadSlideshow();
     } catch (e){
-      subtitle.textContent = "";
       console.error(e);
     }
   }
-
-  init();
-})();
