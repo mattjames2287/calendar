@@ -154,7 +154,7 @@ body{
   flex-direction:column;
   gap:10px;
   flex:1 1 auto;
-  overflow:auto;
+  overflow:hidden;
 }
 
 .dow{
@@ -171,14 +171,18 @@ body{
 .grid{
   display:grid;
   grid-template-columns: repeat(7, 1fr);
+  /* Fill the available panel height (month view) */
+  grid-template-rows: repeat(6, minmax(0, 1fr));
   gap:10px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .day{
   background: var(--card);
   border:1px solid var(--line);
   border-radius: var(--radiusSm);
-  min-height:96px;
+  min-height:0;
   padding:10px;
   display:flex;
   flex-direction:column;

@@ -410,7 +410,7 @@
       setView("month");
       await loadSlideshow();
     } catch (e){
-      subtitle.textContent = "Check config.js / Apps Script";
+      subtitle.textContent = "";
       console.error(e);
     }
   }
