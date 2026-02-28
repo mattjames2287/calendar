@@ -3,12 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Personal Calendar</title>
+  <title>Calendar</title>
   <link rel="stylesheet" href="./style.css?v=5" />
 </head>
 <body>
   <div class="layout">
     <aside class="slideshow" id="slideshow" aria-label="Photos">
+      <div class="clockBar" aria-label="Local date and time">
+        <div class="clockTime" id="clockTime">—</div>
+        <div class="clockDate" id="clockDate">—</div>
+      </div>
       <div class="slideFrame">
         <img id="slideImg" alt="" />
         <div class="slideShade"></div>
@@ -24,7 +28,7 @@
         <div class="brand">
           <div class="dot"></div>
           <div class="titles">
-            <div class="title">Personal Calendar</div>
+            <div class="title"></div>
             <div class="subtitle" id="subtitle">—</div>
           </div>
         </div>

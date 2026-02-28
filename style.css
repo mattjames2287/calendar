@@ -35,9 +35,33 @@ body{
   flex: 0 0 36%;
   display:none; /* portrait: hidden */
 }
+
+/* Clock bar above slideshow (landscape) */
+.clockBar{
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:4px;
+  padding:14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(10,10,12,.9);
+  box-shadow:var(--shadow);
+  max-height: 25vh; /* never dominate the left panel */
+}
+.clockTime{
+  font-weight:800;
+  font-size: 28px;
+  letter-spacing: .2px;
+}
+.clockDate{
+  color: var(--muted);
+  font-size: 14px;
+  letter-spacing: .2px;
+}
 .slideFrame{
-  height:100%;
-  min-height: calc(100vh - 36px);
+  flex:1 1 auto;
+  min-height:0;
   background: #050506;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -104,6 +128,7 @@ body{
   font-weight:700;
   letter-spacing:.2px;
 }
+.title:empty{ display:none; }
 .subtitle{
   color:var(--muted);
   font-size:12px;
@@ -339,7 +364,7 @@ body{
 
 /* Landscape / Raspberry Pi */
 @media (orientation: landscape) and (min-width: 900px){
-  .slideshow{ display:block; }
+  .slideshow{ display:flex; flex-direction:column; gap:12px; }
   .layout{ padding:18px; }
 }
 

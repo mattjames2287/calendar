@@ -28,6 +28,8 @@
   const slideshow = el("slideshow");
   const slideImg = el("slideImg");
   const slideSub = el("slideSub");
+  const clockTime = el("clockTime");
+  const clockDate = el("clockDate");
 
   const today = new Date();
   let view = "month";
@@ -345,6 +347,62 @@
   let slideshowUrls = [];
   let slideIdx = 0;
   let slideTimer = null;
+  let photoRefreshTimer = null;
+
+  // Local clock (12-hour) above slideshow
+  function startClock(){
+    if(!clockTime || !clockDate) return;
+    const pad2 = (n)=>String(n).padStart(2,"0");
+    const tick = ()=>{
+      const now = new Date();
+      let h = now.getHours();
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12; if(h === 0) h = 12;
+      const m = pad2(now.getMinutes());
+      clockTime.textContent = `${h}:${m} ${ampm}`;
+      clockDate.textContent = now.toLocaleDateString(undefined, {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric"
+      });
+    };
+    tick();
+    // Update every second so minute flips instantly; still lightweight.
+    setInterval(tick, 1000);
+  }
+
+  function normalizeList(list){
+    const seen = new Set();
+    const out = [];
+    (list || []).forEach(u=>{
+      if(!u || typeof u !== "string") return;
+      if(seen.has(u)) return;
+      seen.add(u);
+      out.push(u);
+    });
+    return out;
+  }
+
+  function syncSlideshowList(freshRaw){
+    const fresh = normalizeList(freshRaw);
+    const old = normalizeList(slideshowUrls);
+
+    const freshSet = new Set(fresh);
+    const oldSet = new Set(old);
+
+    // Remove deleted (preserve current order)
+    const next = old.filter(u => freshSet.has(u));
+
+    // Append new (in backend order)
+    fresh.forEach(u => {
+      if(!oldSet.has(u)) next.push(u);
+    });
+
+    slideshowUrls = next;
+    if(slideIdx >= slideshowUrls.length) slideIdx = 0;
+    slideSub && (slideSub.textContent = slideshowUrls.length ? `${slideshowUrls.length} photos` : "No photos");
+  }
 
   async function loadSlideshow(){
     // Only run slideshow in landscape; CSS hides it otherwise
@@ -361,11 +419,47 @@
         slideshowUrls = data.photos.slice(0, 100);
         slideSub.textContent = `${slideshowUrls.length} photos`;
         startSlideshow();
+        startPhotoRefresh();
       } else {
+        slideshowUrls = [];
         slideSub.textContent = "No photos";
+        startPhotoRefresh();
       }
     } catch (e){
       slideSub.textContent = "Slideshow unavailable";
+    }
+  }
+
+  function startPhotoRefresh(){
+    stopPhotoRefresh();
+    // Recheck Drive folder every 60 seconds: append new, remove deleted
+    photoRefreshTimer = setInterval(async ()=>{
+      try{
+        const data = await jsonp(apiUrl({
+          route: "photos",
+          token: cfg.TOKEN || ""
+        }));
+        if(data && data.ok && Array.isArray(data.photos)){
+          syncSlideshowList(data.photos.slice(0, 100));
+          // If we just went from empty->non-empty, start slideshow
+          if(slideshowUrls.length && !slideTimer){
+            startSlideshow();
+          }
+          // If emptied out, stop slideshow cleanly
+          if(!slideshowUrls.length){
+            stopSlideshow();
+          }
+        }
+      } catch(_){
+        // silent; will retry next tick
+      }
+    }, 60 * 1000);
+  }
+
+  function stopPhotoRefresh(){
+    if(photoRefreshTimer){
+      clearInterval(photoRefreshTimer);
+      photoRefreshTimer = null;
     }
   }
 
@@ -416,10 +510,14 @@
 
   window.addEventListener("orientationchange", ()=>{
     stopSlideshow();
+    stopPhotoRefresh();
     loadSlideshow();
   });
 
   async function init(){
+    // Local clock (safe, UI-only)
+    startClock();
+
     // Always render UI first (even if backend is offline)
     subtitle.textContent = fmtMonthTitle(today);
     eventsByDay = new Map();
