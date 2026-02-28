@@ -142,6 +142,8 @@
     const daysInMonth = endOfMonthExclusive(today).getDate() - 1; // not used
     const last = new Date(today.getFullYear(), today.getMonth()+1, 0);
     const totalDays = last.getDate();
+    const weeks = Math.ceil((firstDow + totalDays) / 7);
+    grid.style.gridTemplateRows = `repeat(${weeks}, minmax(0, 1fr))`;
 
     // Fill leading blanks (muted)
     for(let i=0;i<firstDow;i++){
@@ -356,7 +358,7 @@
       }));
 
       if(data && data.ok && Array.isArray(data.photos) && data.photos.length){
-        slideshowUrls = data.photos.map(p => (typeof p === 'string' ? p : (p && p.url))).filter(Boolean).slice(0, 100);
+        slideshowUrls = data.photos.slice(0, 100);
         slideSub.textContent = `${slideshowUrls.length} photos`;
         startSlideshow();
       } else {
@@ -369,21 +371,36 @@
 
   function showSlide(){
     if(!slideshowUrls.length || !slideImg) return;
+
     const url = slideshowUrls[slideIdx % slideshowUrls.length];
     slideIdx++;
 
-    // Preload then fade
-    const img = new Image();
-    img.onload = ()=>{
-      slideImg.classList.remove("show");
-      // next tick to allow transition
-      requestAnimationFrame(()=>{
-        slideImg.src = url;
-        requestAnimationFrame(()=> slideImg.classList.add("show"));
-      });
+    // Fade out, then set src. Add show on load. If blocked/error, skip ahead.
+    slideImg.classList.remove("show");
+
+    const onLoad = ()=>{
+      slideImg.removeEventListener("load", onLoad);
+      slideImg.removeEventListener("error", onErr);
+      requestAnimationFrame(()=> slideImg.classList.add("show"));
     };
-    img.src = url;
+    const onErr = ()=>{
+      slideImg.removeEventListener("load", onLoad);
+      slideImg.removeEventListener("error", onErr);
+
+      // Show a quick status + try next image
+      slideSub && (slideSub.textContent = "Photos blocked (trying next)");
+      setTimeout(()=>{ if(slideshowUrls.length) showSlide(); }, 800);
+    };
+
+    slideImg.addEventListener("load", onLoad, { once:false });
+    slideImg.addEventListener("error", onErr, { once:false });
+
+    // Cache-bust a bit to avoid stale redirect issues
+    const bust = "cb=" + Date.now().toString(36);
+    slideImg.src = url + (url.includes("?") ? "&" : "?") + bust;
   }
+
+  function startSlideshow(){
 
   function startSlideshow(){
     stopSlideshow();
