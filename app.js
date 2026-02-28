@@ -441,3 +441,7 @@
       console.error(e);
     }
   }
+
+  // Kick things off
+  init();
+})();
