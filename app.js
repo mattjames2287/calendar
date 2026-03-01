@@ -12,6 +12,8 @@
   const monthBtn = el("monthBtn");
   const weekBtn = el("weekBtn");
   const todayBtn = el("todayBtn");
+  const prevMonthBtn = el("prevMonthBtn");
+  const nextMonthBtn = el("nextMonthBtn");
 
   const subtitle = el("subtitle");
   const grid = el("grid");
@@ -32,6 +34,8 @@
   const clockDate = el("clockDate");
 
   const today = new Date();
+  // Month navigation: view other months without changing "today"
+  let activeMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   let view = "month";
   let eventsByDay = new Map(); // key YYYY-MM-DD -> events[]
   let monthStart, monthEnd;
@@ -106,10 +110,10 @@
   }
 
   async function loadMonthEvents(){
-    monthStart = startOfMonth(today);
-    monthEnd = endOfMonthExclusive(today);
+    monthStart = startOfMonth(activeMonth);
+    monthEnd = endOfMonthExclusive(activeMonth);
 
-    subtitle.textContent = fmtMonthTitle(today);
+    subtitle.textContent = fmtMonthTitle(activeMonth);
 
     const start = isoDate(monthStart);
     const end = isoDate(monthEnd);
@@ -139,10 +143,10 @@
 
     grid.innerHTML = "";
 
-    const first = startOfMonth(today);
+    const first = startOfMonth(activeMonth);
     const firstDow = first.getDay(); // 0 Sun
-    const daysInMonth = endOfMonthExclusive(today).getDate() - 1; // not used
-    const last = new Date(today.getFullYear(), today.getMonth()+1, 0);
+    const daysInMonth = endOfMonthExclusive(activeMonth).getDate() - 1; // not used
+    const last = new Date(activeMonth.getFullYear(), activeMonth.getMonth()+1, 0);
     const totalDays = last.getDate();
     const weeks = Math.ceil((firstDow + totalDays) / 7);
     grid.style.gridTemplateRows = `repeat(${weeks}, minmax(0, 1fr))`;
@@ -155,7 +159,7 @@
     }
 
     for(let day=1; day<=totalDays; day++){
-      const d = new Date(today.getFullYear(), today.getMonth(), day);
+      const d = new Date(activeMonth.getFullYear(), activeMonth.getMonth(), day);
       const key = isoDate(d);
       const evs = (eventsByDay.get(key) || []).slice().sort((a,b)=>String(a.start).localeCompare(String(b.start)));
 
@@ -338,10 +342,32 @@
 
   monthBtn.addEventListener("click", ()=>setView("month"));
   weekBtn.addEventListener("click", ()=>setView("week"));
-  todayBtn.addEventListener("click", ()=>{
-    // always current month anyway; just ensure highlights / drawer anchors
-    setView(view);
-  });
+todayBtn.addEventListener("click", async ()=>{
+  // Jump back to the real current month + refresh events
+  activeMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  try{
+    await loadMonthEvents();
+  }catch(_){}
+  setView(view);
+});
+
+async function changeMonth(delta){
+  // Only affects month view (week view remains tied to "today")
+  activeMonth = new Date(activeMonth.getFullYear(), activeMonth.getMonth() + delta, 1);
+  try{
+    await loadMonthEvents();
+    if(view === "month") renderMonth();
+    // If user is in week view, leave it alone, but month title should still update
+    if(view === "week") subtitle.textContent = fmtMonthTitle(activeMonth);
+  } catch (e){
+    console.error(e);
+    subtitle.textContent = fmtMonthTitle(activeMonth) + "  •  Offline";
+    if(view === "month") renderMonth();
+  }
+}
+
+prevMonthBtn && prevMonthBtn.addEventListener("click", ()=> changeMonth(-1));
+nextMonthBtn && nextMonthBtn.addEventListener("click", ()=> changeMonth(1));
 
   // Slideshow (landscape only) pulling from Apps Script
   let slideshowUrls = [];
@@ -519,7 +545,7 @@
     startClock();
 
     // Always render UI first (even if backend is offline)
-    subtitle.textContent = fmtMonthTitle(today);
+    subtitle.textContent = fmtMonthTitle(activeMonth);
     eventsByDay = new Map();
     setView("month");
 
@@ -529,7 +555,7 @@
       setView(view);
     } catch (e){
       console.error(e);
-      subtitle.textContent = fmtMonthTitle(today) + "  •  Offline";
+      subtitle.textContent = fmtMonthTitle(activeMonth) + "  •  Offline";
     }
 
     // Slideshow (optional)

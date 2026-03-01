@@ -374,3 +374,19 @@ body{
   .grid{ gap:8px; }
   .day{ min-height:84px; padding:9px; }
 }
+
+
+/* Month navigation buttons (small, non-intrusive) */
+.monthNav{
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.monthNav .iconBtn{
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-size: 18px;
+  line-height: 1;
+}
